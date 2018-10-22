@@ -49,7 +49,8 @@ def reader():
                        print(str(len(urls)))
                 list_dict.append(time_urls)
                 lines_cnt+=1
-                if(lines_cnt==100000):
+                if(lines_cnt==500000):
+                   print(lines_cnt)
                    break
 
                   
@@ -71,25 +72,43 @@ def str_counter():
                lines_cnt+=1
            print(lines_cnt)
 
+
+#декоратор время выполнения
+def time_decorator(original_func):
+    print('---begin---->')
+    def wrapper(*args, **kwargs):
+        start = datetime.datetime.now()
+        result = original_func(*args, **kwargs)
+        end = datetime.datetime.now()
+        print('{0} is executed in {1}'.format(original_func.__name__, end-start))
+        return result
+    return wrapper
+
+
 #Функция подсчета статистики по url'ам. На вход подается лист словарей list[{"url":url},{"time":time}]
+@time_decorator
 def url_abscounter():
     list_urls=reader()#получаем список словарей со значениями
     dict_absstat={} 
-    try:
-      for row in list_urls:
+    lines_cnt= 0 #ограничемся пока 1000 строк
+    for row in list_urls:
+        try:
          if row["url"] in dict_absstat.keys():
               dict_absstat[row["url"]]+=1
          else:
             dict_absstat[row["url"]]=1
-    except Exception as exc:
+         lines_cnt+=1
+        except Exception as exc:
                  print('-----error-->>'+str(line_err))
     #пробуем посчитать максимум и миниму из словарями
     key_max = max(dict_absstat.keys(), key=(lambda k: dict_absstat[k]))
     key_min = min(dict_absstat.keys(), key=(lambda k: dict_absstat[k]))
-
+    print(lines_cnt)
     print('Maximum Value: ',dict_absstat[key_max])
     print('Minimum Value: ',dict_absstat[key_min])
      #print(dict_absstat)
+
+
 
 def main():
     #pass
