@@ -45,7 +45,7 @@ def reader():
                     time_urls["url"]='/xxxxx'
                     time_urls["time"]=0
                 except Exception as exc:
-                       print(urls)
+                       #print(urls)
                        print(str(len(urls)))
                 list_dict.append(time_urls)
                 lines_cnt+=1
