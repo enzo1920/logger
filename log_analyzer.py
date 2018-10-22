@@ -21,7 +21,7 @@ config = {
 def reader():
     #проверяем наличие файла в директории
     #print(os.path.dirname(os.path.abspath(__file__)))
-    
+    error_counter=0#счетчик ошибок
     list_dict=[]#список со словарями
     rx = re.compile(r'(?:GET|POST)\s+(/\S+)')
     file_log=os.path.dirname(os.path.abspath(__file__))+'/logs/nginx-access-ui.log-20170630.gz'
@@ -42,16 +42,17 @@ def reader():
                     time_urls["url"]=urls[0]
                     time_urls["time"]=time
                   else:
-                    time_urls["url"]='/xxxxx'
-                    time_urls["time"]=0
+                    print('error parsing url in str'+str(lines_cnt))
+                    #time_urls["url"]='/xxxxx'
+                    #time_urls["time"]=0
                 except Exception as exc:
                        #print(urls)
                        print(str(len(urls)))
                 list_dict.append(time_urls)
                 lines_cnt+=1
-                if(lines_cnt==500000):
-                   print(lines_cnt)
-                   break
+                #if(lines_cnt==1000000):
+                   #print(lines_cnt)
+                   #break
 
                   
      except KeyboardInterrupt:
@@ -63,14 +64,14 @@ def reader():
     return list_dict
 
 # simple file counter
-def str_counter():
-    file_log=os.path.dirname(os.path.abspath(__file__))+'/logs/nginx-access-ui.log-20170630.gz'
-    if os.path.isfile(file_log):
-       with gzip.open(file_log,'r') as gfile:
-           lines_cnt = 0 #ограничемся пока 1000 строк
-           for line in gfile:
-               lines_cnt+=1
-           print(lines_cnt)
+#def str_counter():
+#    file_log=os.path.dirname(os.path.abspath(__file__))+'/logs/nginx-access-ui.log-20170630.gz'
+#    if os.path.isfile(file_log):
+#       with gzip.open(file_log,'r') as gfile:
+#           lines_cnt = 0 #ограничемся пока 1000 строк
+#           for line in gfile:
+#               lines_cnt+=1
+#           print(lines_cnt)
 
 
 #декоратор время выполнения
@@ -93,13 +94,13 @@ def url_abscounter():
     lines_cnt= 0 #ограничемся пока 1000 строк
     for row in list_urls:
         try:
-         if row["url"] in dict_absstat.keys():
+         if row["url"] in dict_absstat:#.keys():
               dict_absstat[row["url"]]+=1
          else:
             dict_absstat[row["url"]]=1
          lines_cnt+=1
         except Exception as exc:
-                 print('-----error-->>'+str(line_err))
+                 print('-----error count-->>')
     #пробуем посчитать максимум и миниму из словарями
     key_max = max(dict_absstat.keys(), key=(lambda k: dict_absstat[k]))
     key_min = min(dict_absstat.keys(), key=(lambda k: dict_absstat[k]))
