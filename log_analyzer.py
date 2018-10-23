@@ -4,7 +4,9 @@ import re
 import gzip
 import os
 import datetime
+import time
 import sys
+#import gc
 # log_format ui_short '$remote_addr  $remote_user $http_x_real_ip [$time_local] "$request" '
 #                     '$status $body_bytes_sent "$http_referer" '
 #                     '"$http_user_agent" "$http_x_forwarded_for" "$http_X_REQUEST_ID" "$http_X_RB_USER" '
@@ -38,11 +40,15 @@ def reader():
                 time=float(line[-6:])
                 #print(str(time)+' '+urls[0])
                 time_urls={}# словарь содержит url и время
+                #словарь статистики состоит из:time_url-время урла , url_count количества
+                stat_dict={}
                 try:
                    #ога тут оказывается, может быть пусто, занчит меняли формат
                   if len(urls)!=0:
+                    stat_dict["url_time"]=time#добавляем в словарь статистики время
+                    stat_dict["cnt"]=0#добавляем в словарь статистики количество 0
                     time_urls["url"]=urls[0]
-                    time_urls["time"]=time
+                    time_urls["stat"]=stat_dict #ключ- урл, значение- список со статистикой 
                   else:
                     print('error parsing url in str '+str(lines_cnt))
                     error_counter+=1
@@ -53,9 +59,9 @@ def reader():
                        print(str(len(urls)))
                 list_dict.append(time_urls)
                 lines_cnt+=1
-                #if(lines_cnt==602095):
-                   #print(lines_cnt)
-                   #break
+                if(lines_cnt==100):
+                   print(lines_cnt)
+                   break
 
                   
      except KeyboardInterrupt:
@@ -64,6 +70,7 @@ def reader():
     else:
          print('file not found')
          list_dict=0
+    #print(list_dict)
     return list_dict,error_counter
 
 # simple file counter
@@ -98,29 +105,46 @@ def url_abscounter(list_urls, err_cnt):
     dict_absstat={}#словарь, в который будем записывать суммарное количество вхождений урлов
     print('config max error is: '+str(config['max_err'])+' analysis error is: '+str(err_cnt))
     if(err_cnt<=config['max_err']):
-          for row in list_urls:
+          for dict_row in list_urls:# получается , что у нас каждая строчка словарь
               try:
-                 if row["url"] in dict_absstat:#.keys():
-                     dict_absstat[row["url"]]+=1
+                 #print(dict_row["stat"] )
+                 if dict_row["url"] in dict_absstat:#.keys():
+                                  print("find!!!!")
+                                  #time.sleep(5)
+                                  dict_absstat.update({dict_row["url"]:
+                                                       {"time":dict_absstat["time"]+dict_row["stat"]["url_time"],
+                                                        "cnt":dict_absstat["cnt"]+1,
+                                                        "min":min([dict_absstat[dict_row["url"]]],dict_absstat["min"]),
+                                                        "max":max([dict_absstat[dict_row["url"]]],dict_absstat["max"])}})
+
                  else:
-                     dict_absstat[row["url"]]=1
+                                  #print("2")
+                      dict_absstat.update({dict_row["url"]:
+                                                           {"time":dict_row["stat"]["url_time"],
+                                                           "cnt":1,
+                                                           "min":dict_row["stat"]["url_time"],
+                                                           "max":dict_row["stat"]["url_time"]}})
+                      #dict_row["stat"]["cnt"]=1
+                      #print(dict_row["stat"]["cnt"])
+
+                      #dict_absstat[row["url"]]=1
                  lines_cnt+=1
               except Exception as exc:
-                       print('-----error count in -->> '+str(lines_cnt))
+                       print('-----error count in -->> '+str(exc))
           #пробуем посчитать максимум и минимум из словарями
-          key_max = max(dict_absstat.keys(), key=(lambda k: dict_absstat[k]))
-          key_min = min(dict_absstat.keys(), key=(lambda k: dict_absstat[k]))
-          max_val=dict_absstat[key_max]
-          min_val=dict_absstat[key_min]
-          print('Cnt Value: ',str(lines_cnt))
-          print('Maximum Value: ',str(max_val))
-          print('Minimum Value: ',str(min_val))
+          #key_max = max(dict_absstat.keys(), key=(lambda k: dict_absstat[k]))
+          #key_min = min(dict_absstat.keys(), key=(lambda k: dict_absstat[k]))
+          #max_val=dict_absstat[key_max]
+          #min_val=dict_absstat[key_min]
+          #print('Cnt Value: ',str(lines_cnt))
+          #print('Maximum Value: ',str(max_val))
+          #print('Minimum Value: ',str(min_val))
+          #print(dict_absstat)
     else:   
           print('Analysis: your file contins more errors than set in config')
           print(lines_cnt)
-
-
-    #return  max_val, min_val, lines_cnt
+    print(dict_absstat["url"]["cnt"])
+    #return  dict_absstat
 
 
 def main():
@@ -128,6 +152,8 @@ def main():
     #max,min,cnt=
     lsturls, errcnt=reader()#получаем список словарей со значениями и количество ошибок при парсинге
     url_abscounter(lsturls,errcnt)
+
+    #sys.exit()
     #print('Cnt Value: ',cnt)
     #print('Maximum Value: ',str(max))
     #print('Minimum Value: ',str(min))
