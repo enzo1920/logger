@@ -59,7 +59,7 @@ def reader():
                        print(str(len(urls)))
                 list_dict.append(time_urls)
                 lines_cnt+=1
-                if(lines_cnt==100):
+                if(lines_cnt==2500):
                    print(lines_cnt)
                    break
 
@@ -85,8 +85,7 @@ def reader():
 
 
 #декоратор время выполнения
-def time_decorator(original_func):
-    print('---begin---->')
+def benchmark(original_func):
     def wrapper(*args, **kwargs):
         start = datetime.datetime.now()
         result = original_func(*args, **kwargs)
@@ -97,9 +96,9 @@ def time_decorator(original_func):
 
 
 #Функция подсчета статистики по url'ам. На вход подается лист словарей list[{"url":url},{"time":time}]
-@time_decorator
+@benchmark
 def url_abscounter(list_urls, err_cnt):
-    lines_cnt= 0 #ограничемся пока 1000 строк
+    urls_cnt= 0 #ограничемся пока 1000 строк
     max_val=0 # максимальное значение урлов
     min_val=0 # минимальное значение урлов
     dict_absstat={}#словарь, в который будем записывать суммарное количество вхождений урлов
@@ -128,7 +127,7 @@ def url_abscounter(list_urls, err_cnt):
                       #print(dict_row["stat"]["cnt"])
 
                       #dict_absstat[row["url"]]=1
-                 lines_cnt+=1
+                 
               except Exception as exc:
                        print('-----error count in -->> '+str(exc))
           #пробуем посчитать максимум и минимум из словарями
@@ -143,15 +142,31 @@ def url_abscounter(list_urls, err_cnt):
     else:   
           print('Analysis: your file contins more errors than set in config')
           print(lines_cnt)
-    print(dict_absstat["url"]["cnt"])
-    #return  dict_absstat
 
+    return  dict_absstat
+
+#функция для подсчета процентов на вход словарь с абсолютными занчения abs_counter
+@benchmark
+def avg_counter(abs_dict):
+        #Пробуем посчитать средние значения
+        urls_cnt=0
+        for k,v in abs_dict.iteritems():
+             #print(k)
+             urls_cnt+=1
+        #всего урл:
+        print('totat distinct url: '+str(urls_cnt))
+        print(abs_dict)
+
+        for k,v in abs_dict.iteritems():
+               abs_dict[k]["percent_count"]=100*float(abs_dict[k]["cnt"])/float(urls_cnt)
+        print(abs_dict)
 
 def main():
     #pass
     #max,min,cnt=
     lsturls, errcnt=reader()#получаем список словарей со значениями и количество ошибок при парсинге
-    url_abscounter(lsturls,errcnt)
+    abs_dict=url_abscounter(lsturls,errcnt)
+    avg_counter(abs_dict)
 
     #sys.exit()
     #print('Cnt Value: ',cnt)
