@@ -6,6 +6,8 @@ import os
 import datetime
 import time
 import sys
+import json
+from string import Template
 #import gc
 # log_format ui_short '$remote_addr  $remote_user $http_x_real_ip [$time_local] "$request" '
 #                     '$status $body_bytes_sent "$http_referer" '
@@ -13,7 +15,7 @@ import sys
 #                     '$request_time';
 
 config = {
-    "REPORT_SIZE": 1000,
+    "REPORT_SIZE": 20,
     "REPORT_DIR": "./reports",
     "LOG_DIR": "./log",
     "max_err": 30,
@@ -88,7 +90,7 @@ def reader():
                                                  {"time_sum":time_urls[urls]['time_sum']+time,
                                                   "time_mass":time_list,
                                                   "cnt":time_urls[urls]["cnt"]+1}})
-                         unique_urlcnt+=1
+                         
 
                      else:
                          time_list.append(time)
@@ -96,7 +98,7 @@ def reader():
                                                  {"time_sum":time,
                                                   "time_mass":time_list,
                                                   "cnt":1}})
-                         #print(time_urls)
+                         unique_urlcnt+=1
 
                   else:
                        print('url len=0')
@@ -108,7 +110,7 @@ def reader():
                        print(str(exc))
                 lines_cnt+=1
                 timetotal_url+=time
-                if(lines_cnt==2000):
+                if(lines_cnt==300000):
                    print(lines_cnt)
                    break
 
@@ -150,18 +152,71 @@ def percent_url_counter(dict,uniq_url,time_sum,err):
         #print range(n-10,n+1)[::-1]
     return dict
 
+#функция возвращает топ записей из массива
+def top_values(dict_stat,top_count):
+#{"count": 2767, "time_avg": 62.994999999999997, "time_max": 9843.5689999999995, "time_sum": 174306.35200000001,
+# "url": "/api/v2/internal/html5/phantomjs/queue/?wait=1m", "time_med": 60.073, "time_perc": 9.0429999999999993,
+# "count_perc": 0.106}
+    cntgot=0#количество занчений которое отдали, top_count которое требуется отдать
+    list_to_render=[]
+    for key, value in sorted(dict_stat.items(),key=lambda x: x[1]['time_sum'],reverse=True):
+        
+        print (value['time_sum'])
+        list_to_render.append({"count":value['cnt'],
+                               "time_avg":value['time_avg'],
+                               "time_max":value['time_max'],
+                               "time_sum":value['time_sum'],
+                               "url":key,
+                               "time_med":value['time_med'],
+                               "time_perc":value['time_perc'],
+                               "count_perc":value['count_perc']
+                                                            })
+        cntgot+=1
+        if(cntgot==top_count):
+            print("достатоШно")
+            jsonarr = json.dumps(list_to_render)
+            return jsonarr
+            #print(jsonarr)
+            break
+        
+# функция рендеринга html файла
+def json_templater(json_array):
+    file_report=os.path.dirname(os.path.abspath(__file__))+'/reports/report.html'
+    print(file_report)
+    if os.path.isfile(file_report):
+     with open(file_report, 'r') as report_template:
+        #for line in report_template:
+            #if('$table_json' in line):
+               #t = Template('$table_json')
+               #t.substitute(table_json=json_array)
+        render_data = report_template.read()
+        # print template for visual cue.
+        #print('Template passed:')
+        #print(render_data)
+        t = Template(render_data)
+        #print (s)
+        #t.substitute(table_json=json_array) 
+        data_export=t.safe_substitute(table_json=json_array)
+        print(data_export)
+     #file_report_rend=os.path.dirname(os.path.abspath(__file__))+'/reports/report_render.html'
+     #with open(file_report_rend, 'w') as output_file:
+          #output_file.write(data_export)
+
+    else:
+         print('file not found')
+
 def main():
     #pass
     timeurls, errcnt,uniquecnt,total_cnt,total_time=reader()#получаем  словарЬ со значениями и количество ошибок при парсинге
     final_dict=percent_url_counter(timeurls,uniquecnt,total_time,errcnt)
+    json_mass=top_values(final_dict,10)
+    json_templater(json_mass)
     print("Error count is: "+str(errcnt))
     print("unique count  is: "+str(uniquecnt))
     print("total count str  is: "+str(total_cnt))
     print("total time url   is: "+str(total_time))
-    #list=[0.3,0.155,0,0.112,0.8,0.1,0.2,4.7]
-    for k,v in final_dict.iteritems():
-        if(final_dict[k]["cnt"]>=2):
-            print(k,v)
+    # топчик
+    
 
 
 if __name__ == "__main__":
