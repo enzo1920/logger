@@ -36,11 +36,12 @@ def benchmark(original_func):
 def check_report(report_dir,date_stamp):
     file_report_rend=report_dir+'/report-'+date_stamp.strftime("%Y.%m.%d")+'.html' #файл который рендерим, отчет
     
-    if os.path.isfile(file_report_rend):
+    if os.path.exists(file_report_rend):
          print('File is alive  '+file_report_rend)
          return True 
     else:
-         print('File not found  '+file_report_rend)
+         print('{0} func : file not found {1}'.format(sys._getframe().f_code.co_name,file_report_rend))
+         #print('File not found  '+file_report_rend)
          return False 
 
 
@@ -261,8 +262,8 @@ def json_templater(json_array,report_dir,date_stamp):
 def main():
     #log_finder
     file_log,date_log,ext=log_finder(config["LOG_DIR"])
-    print(check_report(config["LOG_DIR"],date_log))
-    if(check_report(config["LOG_DIR"],date_log)):
+    #print(check_report(config["REPORT_DIR"],date_log))
+    if(check_report(config["REPORT_DIR"],date_log)==False):
          #pass
          #reader(log_dir,file_log,date_log,ext,report_dir)
          timeurls, errcnt,uniquecnt,total_cnt,total_time=reader(config["LOG_DIR"],file_log,date_log,ext)#получаем  словарЬ со значениями и количество ошибок при парсинге
