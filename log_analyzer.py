@@ -32,6 +32,65 @@ def benchmark(original_func):
         return result
     return wrapper
 
+#функция проверки существования файла отчета
+def check_report(report_dir,date_stamp):
+    file_report_rend=report_dir+'/report-'+date_stamp.strftime("%Y.%m.%d")+'.html' #файл который рендерим, отчет
+    
+    if os.path.isfile(file_report_rend):
+         print('File is alive  '+file_report_rend)
+         return True 
+    else:
+         print('File not found  '+file_report_rend)
+         return False 
+
+
+#функция открытия файла гзип или плейн
+def openfile(filename,file_ext, mode='r'):
+    if (file_ext=='gz'):
+        return gzip.open(filename, mode) 
+    else:
+        return open(filename, mode)
+
+#функция поиска самого свежего лога
+def log_finder(log_dir):
+    files = os.listdir(log_dir)
+    dict_files={}
+    #какие расширения файла будем открывать
+    ext_list=['gz','plain']
+    for name in files:
+         split_names=name.split('.')
+         # предпологаем, что формат имени будет такой. $service_name $log_name $ext 
+         #nginx-access-ui.log-20170630.gz
+         #все это разделено точками 
+         #dictionary {service:{date:ext}}
+
+         try:
+              extract_date=datetime.datetime.strptime(split_names[1][4:], '%Y%m%d')
+              year=extract_date.year
+              month='{:02d}'.format(extract_date.month)
+              day='{:02d}'.format(extract_date.day)
+              str_date=str(year)+'.'+str(month)+'.'+str(day)
+              if(len(split_names)>2):
+                  print(split_names[0]+' has date: '+str_date+' ext is:'+split_names[2])
+                  #dict_files.update({})
+                  file_ext=split_names[2]
+              else:
+                  print(split_names[0]+' has date: '+str_date+' ext not found. plain ')
+                  file_ext='plain'
+              #в словарь пойдут только логи ngnix  
+              if ('nginx' in name and file_ext in ext_list):
+                 dict_files.update({name:{'filedate':extract_date.date(),'ext':file_ext}})
+              else:
+                     print ('not ngnix log: '+ name)
+                  
+         except Exception as exc:
+                       print(exc)
+    #print(dict_files)
+    for key, value in sorted(dict_files.items(),key=lambda x: x[1]['filedate'],reverse=True)[:1]:
+          print(key,value['filedate'],value['ext'])
+          return key,value['filedate'],value['ext']
+
+
 
 #функция сравнения двух  максимальногозначения времени
 #rel_tol - относительная толерантность, умножается на большую величину двух аргументов;
@@ -44,6 +103,7 @@ def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
     else:
      return a
 
+
 #функция поиска медианы
 def median(lst):
     n = len(lst)
@@ -53,9 +113,10 @@ def median(lst):
             return sorted(lst)[n//2]
     else:
             return sum(sorted(lst)[n//2-1:n//2+1])/2.0
+
 # на вход подавать имя файла
 @benchmark
-def reader():
+def reader(log_dir,file_log,date_log,ext):
     #проверяем наличие файла в директории
     #print(os.path.dirname(os.path.abspath(__file__)))
     error_counter=0#счетчик ошибок
@@ -63,14 +124,15 @@ def reader():
     timetotal_url=0#счетчик уникальных урлов
     time_urls={}# словарь содержит url и время
     #rx = re.compile(r'(?:GET|POST)\s+(/\S+)')
-    rx = re.compile(r'/\/(.*?)\/\?/ism')
-    file_log=os.path.dirname(os.path.abspath(__file__))+'/logs/nginx-access-ui.log-20170630.gz'
+    #rx = re.compile(r'/\/(.*?)\/\?/ism')
+    #file_log,date_log,ext=log_finder(log_dir)
+    file_log=log_dir+'/'+file_log
     print(file_log)
     if os.path.isfile(file_log):
      try:
-       with gzip.open(file_log,'r') as gfile:
+       with openfile(file_log,ext, 'r') as inputfile:
            lines_cnt = 0 #ограничемся пока 1000 строк
-           for line in gfile:
+           for line in inputfile:
                 #ip = re.findall( r'[0-9]+(?:\.[0-9]+){3}', line[:16] )
                 finded =line.split(' ')
                 #считаем согласно формату, что урл 7, если он не 7 значит формат менялся, очевидно нужно добавить регулярку , чтобы заматчить
@@ -119,7 +181,8 @@ def reader():
                print("прерывание с клавиатуры")
 
     else:
-         print('file not found')
+         #print('file not found')
+         print('{0} func : file not found '.format(sys._getframe().f_code.co_name))
          time_urls={}
          error_counter=config["max_err"]
          unique_urlcnt=0,
@@ -180,41 +243,38 @@ def top_values(dict_stat,top_count):
             break
         
 # функция рендеринга html файла
-def json_templater(json_array):
-    file_report=os.path.dirname(os.path.abspath(__file__))+'/reports/report.html'
+def json_templater(json_array,report_dir,date_stamp):
+    file_report=report_dir+'/report.html' #файл шаблона
+    file_report_rend=report_dir+'/report-'+date_stamp.strftime("%Y.%m.%d")+'.html' #файл который рендерим, отчет
     print(file_report)
     if os.path.isfile(file_report):
-     with open(file_report, 'r') as report_template:
-        #for line in report_template:
-            #if('$table_json' in line):
-               #t = Template('$table_json')
-               #t.substitute(table_json=json_array)
-        render_data = report_template.read()
-        # print template for visual cue.
-        #print('Template passed:')
-        #print(render_data)
-        t = Template(render_data)
-        #print (s)
-        #t.substitute(table_json=json_array) 
-        data_export=t.safe_substitute(table_json=json_array)
-        print(data_export)
-     #file_report_rend=os.path.dirname(os.path.abspath(__file__))+'/reports/report_render.html'
-     #with open(file_report_rend, 'w') as output_file:
-          #output_file.write(data_export)
+       with open(file_report, 'r') as report_template:
+            render_data = report_template.read()
+            t = Template(render_data)
+            data_export=t.safe_substitute(table_json=json_array)
+       with open(file_report_rend, 'w') as output_file:
+          output_file.write(data_export)
 
     else:
          print('file not found')
 
 def main():
-    #pass
-    timeurls, errcnt,uniquecnt,total_cnt,total_time=reader()#получаем  словарЬ со значениями и количество ошибок при парсинге
-    final_dict=percent_url_counter(timeurls,uniquecnt,total_time,errcnt)
-    json_mass=top_values(final_dict,10)
-    json_templater(json_mass)
-    print("Error count is: "+str(errcnt))
-    print("unique count  is: "+str(uniquecnt))
-    print("total count str  is: "+str(total_cnt))
-    print("total time url   is: "+str(total_time))
+    #log_finder
+    file_log,date_log,ext=log_finder(config["LOG_DIR"])
+    print(check_report(config["LOG_DIR"],date_log))
+    if(check_report(config["LOG_DIR"],date_log)):
+         #pass
+         #reader(log_dir,file_log,date_log,ext,report_dir)
+         timeurls, errcnt,uniquecnt,total_cnt,total_time=reader(config["LOG_DIR"],file_log,date_log,ext)#получаем  словарЬ со значениями и количество ошибок при парсинге
+         final_dict=percent_url_counter(timeurls,uniquecnt,total_time,errcnt)
+         json_mass=top_values(final_dict,10)
+         json_templater(json_mass,config["REPORT_DIR"],date_log)
+         print("Error count is: "+str(errcnt))
+         print("unique count  is: "+str(uniquecnt))
+         print("total count str  is: "+str(total_cnt))
+         print("total time url   is: "+str(total_time))
+    else:
+         print(' уже существует. Повторный запуск не требуется')
     # топчик
     
 
