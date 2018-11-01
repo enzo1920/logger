@@ -9,6 +9,8 @@ import sys
 import json
 from string import Template
 import logging
+import ConfigParser
+import argparse
 #import gc
 # log_format ui_short '$remote_addr  $remote_user $http_x_real_ip [$time_local] "$request" '
 #                     '$status $body_bytes_sent "$http_referer" '
@@ -21,22 +23,52 @@ config = {
     "REPORT_SIZE": 20,
     "REPORT_DIR": "./reports",
     "LOG_DIR": "./log",
-    "max_err": 30,
+    "MAX_ERR": 30,
     "WORK_LOG":"./work_log"
 }
 
+
+
+#считыватель конфига
+def config_reader(config_default,fileconf_input):
+    #print(fileconf_input)
+    if(fileconf_input.configname is not None):
+        config_file=fileconf_input.configname
+    else:
+        config_file="./log_analyzer.cfg"
+    if os.path.isfile(config_file):
+       logging.info("config found")
+       config = ConfigParser.RawConfigParser()
+       config.read(config_file)
+       for section_name in config.sections():
+           #print 'Section:', section_name
+           #print '  Options:', config.options(section_name)
+           if(len(config.items(section_name))!=0):
+                    for name, value in config.items(section_name):
+                        name=name.upper()
+                        #print '  %s = %s' % (name, value)
+                        if(name in config_default):
+                           config_default.update({name:value})
+                        else:
+                             logging.info(name+ 'не найдено в конфиге по умолчанию')
+                    #print(config_default)
+           else:
+                  logging.warning('Input config is empty. I will use default config ')
+    else:
+       logging.warning("config file not found. I will use default config")
+       #print(config_default)
+    return config_default
 
 #настройка лога
 def worker_log(worklog_dir):
     if not os.path.exists(worklog_dir):
          os.makedirs(worklog_dir)
-
-
     worklog_file=worklog_dir+'/work_log-'+datetime.datetime.now().strftime("%Y.%m.%d_%H-%M-%S")+'.log'
+    open(worklog_file, 'a').close()
     #worklog_file=worklog_dir+'/work_log.log'
     print(worklog_file)
     logging.basicConfig(level=logging.DEBUG,format='[%(asctime)s] %(levelname).1s %(message)s',datefmt='%Y.%m.%d %H:%M:%S',filename=worklog_file, filemode='w')
-    #logging.info(" тест")
+    logging.info("worker_log is set")
 
 #декоратор время выполнения
 def benchmark(original_func):
@@ -44,7 +76,7 @@ def benchmark(original_func):
         start = datetime.datetime.now()
         result = original_func(*args, **kwargs)
         end = datetime.datetime.now()
-        logging.info('{0} is executed in {1}'.format(original_func.__name__, end-start))
+        print('{0} is executed in {1}'.format(original_func.__name__, end-start))
         #print('{0} is executed in {1}'.format(original_func.__name__, end-start))
         return result
     return wrapper
@@ -73,37 +105,43 @@ def openfile(filename,file_ext, mode='r'):
 def log_finder(log_dir):
     files = os.listdir(log_dir)
     dict_files={}
+    extract_err=0
     #какие расширения файла будем открывать
     ext_list=['gz','plain']
     for name in files:
          split_names=name.split('.')
+         #print(split_names)
+         extract_err=0
          # предпологаем, что формат имени будет такой. $service_name $log_name $ext 
          #nginx-access-ui.log-20170630.gz
          #все это разделено точками 
          #dictionary {service:{date:ext}}
 
          try:
-              extract_date=datetime.datetime.strptime(split_names[1][4:], '%Y%m%d')
-              year=extract_date.year
-              month='{:02d}'.format(extract_date.month)
-              day='{:02d}'.format(extract_date.day)
-              str_date=str(year)+'.'+str(month)+'.'+str(day)
-              if(len(split_names)>2):
+            extract_date=datetime.datetime.strptime(split_names[1][4:], '%Y%m%d')
+         except Exception as exc:
+                       logging.warning(exc)
+                       extract_err=1
+         if(extract_err==0):
+            year=extract_date.year
+            month='{:02d}'.format(extract_date.month)
+            day='{:02d}'.format(extract_date.day)
+            str_date=str(year)+'.'+str(month)+'.'+str(day)
+            if(len(split_names)>2):
                   logging.info(split_names[0]+' has date: '+str_date+' ext is:'+split_names[2])
                   #dict_files.update({})
                   file_ext=split_names[2]
-              else:
+            else:
                   logging.info(split_names[0]+' has date: '+str_date+' ext not found. plain ')
                   file_ext='plain'
               #в словарь пойдут только логи ngnix  
-              if ('nginx' in name and file_ext in ext_list):
+            if ('nginx' in name and file_ext in ext_list):
                  dict_files.update({name:{'filedate':extract_date.date(),'ext':file_ext}})
-              else:
+            else:
                      logging.info('not ngnix log: '+ name)
                   
-         except Exception as exc:
-                       logging.exception(exc)
-    print(len(dict_files))
+
+    #print(len(dict_files))
     #проверка , что в словаре что-то есть. А вдруг нет ничего!
     if(len(dict_files)>0):
         for key, value in sorted(dict_files.items(),key=lambda x: x[1]['filedate'],reverse=True)[:1]:
@@ -138,9 +176,10 @@ def median(lst):
 
 # на вход подавать имя файла
 @benchmark
-def reader(log_dir,file_log,date_log,ext):
+def reader(log_dir,file_log,date_log,ext,max_err):
     #проверяем наличие файла в директории
     #print(os.path.dirname(os.path.abspath(__file__)))
+    logging.info("reader start")
     error_counter=0#счетчик ошибок
     unique_urlcnt=0#счетчик уникальных урлов
     timetotal_url=0#счетчик уникальных урлов
@@ -185,7 +224,7 @@ def reader(log_dir,file_log,date_log,ext):
                          unique_urlcnt+=1
 
                   else:
-                       print('url len=0')
+                       logging.info('url len=0')
                        error_counter+=1
 
                 except Exception as exc:
@@ -194,9 +233,9 @@ def reader(log_dir,file_log,date_log,ext):
                        logging.exception(exc)
                 lines_cnt+=1
                 timetotal_url+=time
-                if(lines_cnt==300000):
-                   print(lines_cnt)
-                   break
+                #if(lines_cnt==600000):
+                   #print(lines_cnt)
+                   #break
 
                   
      except KeyboardInterrupt:
@@ -206,7 +245,7 @@ def reader(log_dir,file_log,date_log,ext):
          #print('file not found')
          logging.warning('{0} func : file not found '.format(sys._getframe().f_code.co_name))
          time_urls={}
-         error_counter=config["max_err"]
+         error_counter=max_err
          unique_urlcnt=0,
          lines_cnt=0
          timetotal_url=0
@@ -217,7 +256,8 @@ def reader(log_dir,file_log,date_log,ext):
 @benchmark
 def percent_url_counter(dict,uniq_url,time_sum,err):
 #считаем статистику для урла
-    if(err<=config["max_err"]):
+    #if(err<=max_err):
+        logging.info("percent_url_counter start")
         for k,v in dict.iteritems():
                dict[k]["count_perc"]=100*float(dict[k]["cnt"])/float(uniq_url)
                dict[k]["time_perc"]=100*dict[k]["time_sum"]/float(time_sum)
@@ -228,25 +268,26 @@ def percent_url_counter(dict,uniq_url,time_sum,err):
                dict[k]["time_max"]=max(list_to_max)
                #медиана времени
                dict[k]["time_med"]=median(list_to_max)
-    else:
+    #else:
 
-        dict={}
-        logging.warning("percent_url_counter При чтении словаря слишком много ошибок")
+        #dict={}
+
         #попробуем посчитать топ по 5 самым частым урлам
         #n = max(dict.values())
         #print range(n-10,n+1)[::-1]
-    return dict
+        return dict
 
 #функция возвращает топ записей из массива
 def top_values(dict_stat,top_count):
 #{"count": 2767, "time_avg": 62.994999999999997, "time_max": 9843.5689999999995, "time_sum": 174306.35200000001,
 # "url": "/api/v2/internal/html5/phantomjs/queue/?wait=1m", "time_med": 60.073, "time_perc": 9.0429999999999993,
 # "count_perc": 0.106}
+    #print(dict_stat)
+    logging.info("top_values start")
     cntgot=0#количество занчений которое отдали, top_count которое требуется отдать
     list_to_render=[]
     for key, value in sorted(dict_stat.items(),key=lambda x: x[1]['time_sum'],reverse=True):
-        
-        print (value['time_sum'])
+        #print (value['time_sum'])
         list_to_render.append({"count":value['cnt'],
                                "time_avg":value['time_avg'],
                                "time_max":value['time_max'],
@@ -256,19 +297,23 @@ def top_values(dict_stat,top_count):
                                "time_perc":value['time_perc'],
                                "count_perc":value['count_perc']
                                                             })
+
         cntgot+=1
+        #print(list_to_render[cntgot]
         if(cntgot==top_count):
             logging.info("top_values: получено запрошенное количество значений . Топчик")
             jsonarr = json.dumps(list_to_render)
-            return jsonarr
-            #print(jsonarr)
+            #return jsonarr
+            #print('cntgot'+str(cntgot))
             break
-        
+        else:
+          jsonarr = json.dumps(list_to_render[cntgot-1])
+    return jsonarr
 # функция рендеринга html файла
 def json_templater(json_array,report_dir,date_stamp):
     file_report=report_dir+'/report.html' #файл шаблона
     file_report_rend=report_dir+'/report-'+date_stamp.strftime("%Y.%m.%d")+'.html' #файл который рендерим, отчет
-    print(file_report)
+    logging.warning(file_report)
     if os.path.isfile(file_report):
        with open(file_report, 'r') as report_template:
             render_data = report_template.read()
@@ -280,26 +325,39 @@ def json_templater(json_array,report_dir,date_stamp):
     else:
          loggin.warning('json_templater file not found') #добавить  обработку, если файл шаблона не найден
 
-def main():
+def main(*args):
     #log_finder
-    worker_log(config["WORK_LOG"])
-    file_log,date_log,ext=log_finder(config["LOG_DIR"])
+    #config_reader
+    #argreader()
+    #argreader()
+    dict_config=config_reader(args[0],args[1])
+    #print(dict_config)
+    report_sz=int(dict_config["REPORT_SIZE"])
+    worker_log(dict_config["WORK_LOG"])
+    file_log,date_log,ext=log_finder(dict_config["LOG_DIR"])
     if(file_log is None):
         #print("no log files")
         logging.info(" main: no log files")
     else:
          #print(check_report(config["REPORT_DIR"],date_log))
-         if(check_report(config["REPORT_DIR"],date_log)==False):
+         if(check_report(dict_config["REPORT_DIR"],date_log)==False):
               #pass
               #reader(log_dir,file_log,date_log,ext,report_dir)
-              timeurls, errcnt,uniquecnt,total_cnt,total_time=reader(config["LOG_DIR"],file_log,date_log,ext)#получаем  словарЬ со значениями и количество ошибок при парсинге
-              final_dict=percent_url_counter(timeurls,uniquecnt,total_time,errcnt)
-              json_mass=top_values(final_dict,10)
-              json_templater(json_mass,config["REPORT_DIR"],date_log)
-              print("Error count is: "+str(errcnt))
-              print("unique count  is: "+str(uniquecnt))
-              print("total count str  is: "+str(total_cnt))
-              print("total time url   is: "+str(total_time))
+              timeurls, errcnt,uniquecnt,total_cnt,total_time=reader(dict_config["LOG_DIR"],file_log,date_log,ext,dict_config["MAX_ERR"])#получаем  словарЬ со значениями и количество ошибок при парсинге
+              #доля ошибок парсинга
+              parse_err=errcnt*100/total_cnt
+              #print('parse_err'+str(parse_err))
+              if(parse_err<=dict_config["MAX_ERR"]): #вынести в конфиг
+                   final_dict=percent_url_counter(timeurls,uniquecnt,total_time,errcnt)
+                   json_mass=top_values(final_dict,report_sz)
+                   json_templater(json_mass,dict_config["REPORT_DIR"],date_log)
+                   print("Error count is: "+str(errcnt))
+                   print("unique count  is: "+str(uniquecnt))
+                   print("total count str  is: "+str(total_cnt))
+                   print("total time url   is: "+str(total_time))
+              else:
+                    logging.warning('Warning!!!  Log parse errors is '+dict_config["MAX_ERR"]+'%. Exit program!!!!!')
+                    sys.exit()
          else:
               #print(' уже существует. Повторный запуск не требуется')
               logging.info(" REPORT уже существует. Повторный запуск не требуется")
@@ -308,4 +366,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+ 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config',dest="configname",required=False)
+    args = parser.parse_args()
+    #print(args)
+    main(config,args)
