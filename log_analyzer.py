@@ -8,19 +8,35 @@ import time
 import sys
 import json
 from string import Template
+import logging
 #import gc
 # log_format ui_short '$remote_addr  $remote_user $http_x_real_ip [$time_local] "$request" '
 #                     '$status $body_bytes_sent "$http_referer" '
 #                     '"$http_user_agent" "$http_x_forwarded_for" "$http_X_REQUEST_ID" "$http_X_RB_USER" '
 #                     '$request_time';
 
+
+
 config = {
     "REPORT_SIZE": 20,
     "REPORT_DIR": "./reports",
     "LOG_DIR": "./log",
     "max_err": 30,
+    "WORK_LOG":"./work_log"
 }
 
+
+#настройка лога
+def worker_log(worklog_dir):
+    if not os.path.exists(worklog_dir):
+         os.makedirs(worklog_dir)
+
+
+    worklog_file=worklog_dir+'/work_log-'+datetime.datetime.now().strftime("%Y.%m.%d_%H-%M-%S")+'.log'
+    #worklog_file=worklog_dir+'/work_log.log'
+    print(worklog_file)
+    logging.basicConfig(level=logging.DEBUG,format='[%(asctime)s] %(levelname).1s %(message)s',datefmt='%Y.%m.%d %H:%M:%S',filename=worklog_file, filemode='w')
+    #logging.info(" тест")
 
 #декоратор время выполнения
 def benchmark(original_func):
@@ -28,7 +44,8 @@ def benchmark(original_func):
         start = datetime.datetime.now()
         result = original_func(*args, **kwargs)
         end = datetime.datetime.now()
-        print('{0} is executed in {1}'.format(original_func.__name__, end-start))
+        logging.info('{0} is executed in {1}'.format(original_func.__name__, end-start))
+        #print('{0} is executed in {1}'.format(original_func.__name__, end-start))
         return result
     return wrapper
 
@@ -37,15 +54,15 @@ def check_report(report_dir,date_stamp):
     file_report_rend=report_dir+'/report-'+date_stamp.strftime("%Y.%m.%d")+'.html' #файл который рендерим, отчет
     
     if os.path.exists(file_report_rend):
-         print('File is alive  '+file_report_rend)
+         logging.info('File is alive  '+file_report_rend)
          return True 
     else:
-         print('{0} func : file not found {1}'.format(sys._getframe().f_code.co_name,file_report_rend))
+         logging.info('{0} func : file not found {1}'.format(sys._getframe().f_code.co_name,file_report_rend))
          #print('File not found  '+file_report_rend)
          return False 
 
 
-#функция открытия файла гзип или плейн
+#функция открытия файла gzip или plain
 def openfile(filename,file_ext, mode='r'):
     if (file_ext=='gz'):
         return gzip.open(filename, mode) 
@@ -72,24 +89,28 @@ def log_finder(log_dir):
               day='{:02d}'.format(extract_date.day)
               str_date=str(year)+'.'+str(month)+'.'+str(day)
               if(len(split_names)>2):
-                  print(split_names[0]+' has date: '+str_date+' ext is:'+split_names[2])
+                  logging.info(split_names[0]+' has date: '+str_date+' ext is:'+split_names[2])
                   #dict_files.update({})
                   file_ext=split_names[2]
               else:
-                  print(split_names[0]+' has date: '+str_date+' ext not found. plain ')
+                  logging.info(split_names[0]+' has date: '+str_date+' ext not found. plain ')
                   file_ext='plain'
               #в словарь пойдут только логи ngnix  
               if ('nginx' in name and file_ext in ext_list):
                  dict_files.update({name:{'filedate':extract_date.date(),'ext':file_ext}})
               else:
-                     print ('not ngnix log: '+ name)
+                     logging.info('not ngnix log: '+ name)
                   
          except Exception as exc:
-                       print(exc)
-    #print(dict_files)
-    for key, value in sorted(dict_files.items(),key=lambda x: x[1]['filedate'],reverse=True)[:1]:
-          print(key,value['filedate'],value['ext'])
-          return key,value['filedate'],value['ext']
+                       logging.exception(exc)
+    print(len(dict_files))
+    #проверка , что в словаре что-то есть. А вдруг нет ничего!
+    if(len(dict_files)>0):
+        for key, value in sorted(dict_files.items(),key=lambda x: x[1]['filedate'],reverse=True)[:1]:
+            #print(key,value['filedate'],value['ext'])
+            return key,value['filedate'],value['ext']
+    else:
+          return None,None,None
 
 
 
@@ -170,7 +191,7 @@ def reader(log_dir,file_log,date_log,ext):
                 except Exception as exc:
                        #print(urls)
                        error_counter+=1
-                       print(str(exc))
+                       logging.exception(exc)
                 lines_cnt+=1
                 timetotal_url+=time
                 if(lines_cnt==300000):
@@ -179,11 +200,11 @@ def reader(log_dir,file_log,date_log,ext):
 
                   
      except KeyboardInterrupt:
-               print("прерывание с клавиатуры")
+               logging.exception("прерывание с клавиатуры")
 
     else:
          #print('file not found')
-         print('{0} func : file not found '.format(sys._getframe().f_code.co_name))
+         logging.warning('{0} func : file not found '.format(sys._getframe().f_code.co_name))
          time_urls={}
          error_counter=config["max_err"]
          unique_urlcnt=0,
@@ -210,7 +231,7 @@ def percent_url_counter(dict,uniq_url,time_sum,err):
     else:
 
         dict={}
-        print("Много ошибок")
+        logging.warning("percent_url_counter При чтении словаря слишком много ошибок")
         #попробуем посчитать топ по 5 самым частым урлам
         #n = max(dict.values())
         #print range(n-10,n+1)[::-1]
@@ -237,7 +258,7 @@ def top_values(dict_stat,top_count):
                                                             })
         cntgot+=1
         if(cntgot==top_count):
-            print("достатоШно")
+            logging.info("top_values: получено запрошенное количество значений . Топчик")
             jsonarr = json.dumps(list_to_render)
             return jsonarr
             #print(jsonarr)
@@ -257,26 +278,32 @@ def json_templater(json_array,report_dir,date_stamp):
           output_file.write(data_export)
 
     else:
-         print('file not found')
+         loggin.warning('json_templater file not found') #добавить  обработку, если файл шаблона не найден
 
 def main():
     #log_finder
+    worker_log(config["WORK_LOG"])
     file_log,date_log,ext=log_finder(config["LOG_DIR"])
-    #print(check_report(config["REPORT_DIR"],date_log))
-    if(check_report(config["REPORT_DIR"],date_log)==False):
-         #pass
-         #reader(log_dir,file_log,date_log,ext,report_dir)
-         timeurls, errcnt,uniquecnt,total_cnt,total_time=reader(config["LOG_DIR"],file_log,date_log,ext)#получаем  словарЬ со значениями и количество ошибок при парсинге
-         final_dict=percent_url_counter(timeurls,uniquecnt,total_time,errcnt)
-         json_mass=top_values(final_dict,10)
-         json_templater(json_mass,config["REPORT_DIR"],date_log)
-         print("Error count is: "+str(errcnt))
-         print("unique count  is: "+str(uniquecnt))
-         print("total count str  is: "+str(total_cnt))
-         print("total time url   is: "+str(total_time))
+    if(file_log is None):
+        #print("no log files")
+        logging.info(" main: no log files")
     else:
-         print(' уже существует. Повторный запуск не требуется')
-    # топчик
+         #print(check_report(config["REPORT_DIR"],date_log))
+         if(check_report(config["REPORT_DIR"],date_log)==False):
+              #pass
+              #reader(log_dir,file_log,date_log,ext,report_dir)
+              timeurls, errcnt,uniquecnt,total_cnt,total_time=reader(config["LOG_DIR"],file_log,date_log,ext)#получаем  словарЬ со значениями и количество ошибок при парсинге
+              final_dict=percent_url_counter(timeurls,uniquecnt,total_time,errcnt)
+              json_mass=top_values(final_dict,10)
+              json_templater(json_mass,config["REPORT_DIR"],date_log)
+              print("Error count is: "+str(errcnt))
+              print("unique count  is: "+str(uniquecnt))
+              print("total count str  is: "+str(total_cnt))
+              print("total time url   is: "+str(total_time))
+         else:
+              #print(' уже существует. Повторный запуск не требуется')
+              logging.info(" REPORT уже существует. Повторный запуск не требуется")
+
     
 
 
