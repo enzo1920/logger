@@ -26,16 +26,15 @@ config = {
     "MAX_ERR": 30,
     "WORK_LOG":"./work_log"
 }
-
+config_file_global="./log_analyzer.cfg"
 
 
 #считыватель конфига
 def config_reader(config_default,fileconf_input):
-    #print(fileconf_input)
     if(fileconf_input.configname is not None):
         config_file=fileconf_input.configname
     else:
-        config_file="./log_analyzer.cfg"
+        config_file=config_file_global
     if os.path.isfile(config_file):
        logging.info("config found")
        config = ConfigParser.RawConfigParser()
@@ -46,17 +45,15 @@ def config_reader(config_default,fileconf_input):
            if(len(config.items(section_name))!=0):
                     for name, value in config.items(section_name):
                         name=name.upper()
-                        #print '  %s = %s' % (name, value)
+
                         if(name in config_default):
                            config_default.update({name:value})
                         else:
-                             logging.info(name+ 'не найдено в конфиге по умолчанию')
-                    #print(config_default)
+                             logging.info(name+ 'not fount in difault config')
            else:
-                  logging.warning('Input config is empty. I will use default config ')
+                  logging.info('Input config is empty. I will use default config ')
     else:
-       logging.warning("config file not found. I will use default config")
-       #print(config_default)
+       logging.info("config file not found. I will use default config")
     return config_default
 
 #настройка лога
@@ -65,7 +62,6 @@ def worker_log(worklog_dir):
          os.makedirs(worklog_dir)
     worklog_file=worklog_dir+'/work_log-'+datetime.datetime.now().strftime("%Y.%m.%d_%H-%M-%S")+'.log'
     open(worklog_file, 'a').close()
-    #worklog_file=worklog_dir+'/work_log.log'
     print(worklog_file)
     logging.basicConfig(level=logging.DEBUG,format='[%(asctime)s] %(levelname).1s %(message)s',datefmt='%Y.%m.%d %H:%M:%S',filename=worklog_file, filemode='w')
     logging.info("worker_log is set")
@@ -110,12 +106,8 @@ def log_finder(log_dir):
     ext_list=['gz','plain']
     for name in files:
          split_names=name.split('.')
-         #print(split_names)
          extract_err=0
-         # предпологаем, что формат имени будет такой. $service_name $log_name $ext 
-         #nginx-access-ui.log-20170630.gz
-         #все это разделено точками 
-         #dictionary {service:{date:ext}}
+
 
          try:
             extract_date=datetime.datetime.strptime(split_names[1][4:], '%Y%m%d')
@@ -129,7 +121,6 @@ def log_finder(log_dir):
             str_date=str(year)+'.'+str(month)+'.'+str(day)
             if(len(split_names)>2):
                   logging.info(split_names[0]+' has date: '+str_date+' ext is:'+split_names[2])
-                  #dict_files.update({})
                   file_ext=split_names[2]
             else:
                   logging.info(split_names[0]+' has date: '+str_date+' ext not found. plain ')
@@ -178,29 +169,21 @@ def median(lst):
 @benchmark
 def reader(log_dir,file_log,date_log,ext,max_err):
     #проверяем наличие файла в директории
-    #print(os.path.dirname(os.path.abspath(__file__)))
     logging.info("reader start")
     error_counter=0#счетчик ошибок
     unique_urlcnt=0#счетчик уникальных урлов
     timetotal_url=0#счетчик уникальных урлов
     time_urls={}# словарь содержит url и время
-    #rx = re.compile(r'(?:GET|POST)\s+(/\S+)')
-    #rx = re.compile(r'/\/(.*?)\/\?/ism')
-    #file_log,date_log,ext=log_finder(log_dir)
     file_log=log_dir+'/'+file_log
     print(file_log)
     if os.path.isfile(file_log):
-     try:
        with openfile(file_log,ext, 'r') as inputfile:
            lines_cnt = 0 #ограничемся пока 1000 строк
            for line in inputfile:
-                #ip = re.findall( r'[0-9]+(?:\.[0-9]+){3}', line[:16] )
                 finded =line.split(' ')
                 #считаем согласно формату, что урл 7, если он не 7 значит формат менялся, очевидно нужно добавить регулярку , чтобы заматчить
-                urls =finded[7].strip() #rx.findall(finded[7])
+                urls =finded[7].strip() 
                 time=float(line[-6:])
-                #print(str(time)+' '+urls[0])
-
                 #словарь статистики состоит из:time_url-время урла , url_count количества
                 time_list=[] #список времени для урла,по нему будем считать медиану
                 try:
@@ -228,21 +211,14 @@ def reader(log_dir,file_log,date_log,ext,max_err):
                        error_counter+=1
 
                 except Exception as exc:
-                       #print(urls)
                        error_counter+=1
                        logging.exception(exc)
                 lines_cnt+=1
                 timetotal_url+=time
-                #if(lines_cnt==600000):
-                   #print(lines_cnt)
-                   #break
 
-                  
-     except KeyboardInterrupt:
-               logging.exception("прерывание с клавиатуры")
+
 
     else:
-         #print('file not found')
          logging.warning('{0} func : file not found '.format(sys._getframe().f_code.co_name))
          time_urls={}
          error_counter=max_err
@@ -256,34 +232,26 @@ def reader(log_dir,file_log,date_log,ext,max_err):
 @benchmark
 def percent_url_counter(dict,uniq_url,time_sum,err):
 #считаем статистику для урла
-    #if(err<=max_err):
-        logging.info("percent_url_counter start")
-        for k,v in dict.iteritems():
-               dict[k]["count_perc"]=100*float(dict[k]["cnt"])/float(uniq_url)
-               dict[k]["time_perc"]=100*dict[k]["time_sum"]/float(time_sum)
-               dict[k]["time_avg"]=dict[k]["time_sum"]/dict[k]["cnt"]
-               #dict[k]["time_med"]=median(dict[k]["time list"])
-               list_to_max=dict[k]["time_mass"]
-               #максимум времени
-               dict[k]["time_max"]=max(list_to_max)
-               #медиана времени
-               dict[k]["time_med"]=median(list_to_max)
-    #else:
+    dict_percent=dict
+    logging.info("percent_url_counter start")
+    for k,v in dict.iteritems():
+           dict_percent[k]["count_perc"]=100*float(dict[k]["cnt"])/float(uniq_url)
+           dict_percent[k]["time_perc"]=100*dict[k]["time_sum"]/float(time_sum)
+           dict_percent[k]["time_avg"]=dict[k]["time_sum"]/dict[k]["cnt"]
+           list_to_max=dict_percent[k]["time_mass"]
+           #максимум времени
+           dict_percent[k]["time_max"]=max(list_to_max)
+           #медиана времени
+           dict_percent[k]["time_med"]=median(list_to_max)
 
-        #dict={}
-        return dict
+    return dict
 
 #функция возвращает топ записей из массива
 def top_values(dict_stat,top_count):
-#{"count": 2767, "time_avg": 62.994999999999997, "time_max": 9843.5689999999995, "time_sum": 174306.35200000001,
-# "url": "/api/v2/internal/html5/phantomjs/queue/?wait=1m", "time_med": 60.073, "time_perc": 9.0429999999999993,
-# "count_perc": 0.106}
-    #print(dict_stat)
     logging.info("top_values start")
     cntgot=0#количество занчений которое отдали, top_count которое требуется отдать
     list_to_render=[]
     for key, value in sorted(dict_stat.items(),key=lambda x: x[1]['time_sum'],reverse=True):
-        #print (value['time_sum'])
         list_to_render.append({"count":value['cnt'],
                                "time_avg":value['time_avg'],
                                "time_max":value['time_max'],
@@ -293,18 +261,15 @@ def top_values(dict_stat,top_count):
                                "time_perc":value['time_perc'],
                                "count_perc":value['count_perc']
                                                             })
-
         cntgot+=1
-        #print(list_to_render[cntgot]
         if(cntgot==top_count):
             logging.info("top_values: получено запрошенное количество значений . Топчик")
             jsonarr = json.dumps(list_to_render)
-            #return jsonarr
-            #print('cntgot'+str(cntgot))
             break
         else:
           jsonarr = json.dumps(list_to_render[cntgot-1])
     return jsonarr
+
 # функция рендеринга html файла
 def json_templater(json_array,report_dir,date_stamp):
     file_report=report_dir+'/report.html' #файл шаблона
@@ -315,6 +280,7 @@ def json_templater(json_array,report_dir,date_stamp):
             render_data = report_template.read()
             t = Template(render_data)
             data_export=t.safe_substitute(table_json=json_array)
+#здесь нужно писать во временный файл, потом делать мув
        with open(file_report_rend, 'w') as output_file:
           output_file.write(data_export)
 
@@ -322,28 +288,20 @@ def json_templater(json_array,report_dir,date_stamp):
          loggin.warning('json_templater file not found') #добавить  обработку, если файл шаблона не найден
 
 def main(*args):
-    #log_finder
-    #config_reader
-    #argreader()
-    #argreader()
+
     dict_config=config_reader(args[0],args[1])
-    #print(dict_config)
     report_sz=int(dict_config["REPORT_SIZE"])
     worker_log(dict_config["WORK_LOG"])
     file_log,date_log,ext=log_finder(dict_config["LOG_DIR"])
     if(file_log is None):
-        #print("no log files")
         logging.info(" main: no log files")
     else:
-         #print(check_report(config["REPORT_DIR"],date_log))
          if(check_report(dict_config["REPORT_DIR"],date_log)==False):
-              #pass
-              #reader(log_dir,file_log,date_log,ext,report_dir)
-              timeurls, errcnt,uniquecnt,total_cnt,total_time=reader(dict_config["LOG_DIR"],file_log,date_log,ext,dict_config["MAX_ERR"])#получаем  словарЬ со значениями и количество ошибок при парсинге
+              #получаем  словарЬ со значениями и количество ошибок при парсинге
+              timeurls, errcnt,uniquecnt,total_cnt,total_time=reader(dict_config["LOG_DIR"],file_log,date_log,ext,dict_config["MAX_ERR"])
               #доля ошибок парсинга
               parse_err=errcnt*100/total_cnt
-              #print('parse_err'+str(parse_err))
-              if(parse_err<=dict_config["MAX_ERR"]): #вынести в конфиг
+              if(parse_err<=dict_config["MAX_ERR"]):
                    final_dict=percent_url_counter(timeurls,uniquecnt,total_time,errcnt)
                    json_mass=top_values(final_dict,report_sz)
                    json_templater(json_mass,dict_config["REPORT_DIR"],date_log)
@@ -352,10 +310,9 @@ def main(*args):
                    print("total count str  is: "+str(total_cnt))
                    print("total time url   is: "+str(total_time))
               else:
-                    logging.warning('Warning!!!  Log parse errors is '+dict_config["MAX_ERR"]+'%. Exit program!!!!!')
+                    logging.exception('Log parse errors is '+dict_config["MAX_ERR"]+'%. Exit program!!!!!')
                     sys.exit()
          else:
-              #print(' уже существует. Повторный запуск не требуется')
               logging.info(" REPORT уже существует. Повторный запуск не требуется")
 
     
@@ -366,5 +323,4 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--config',dest="configname",required=False)
     args = parser.parse_args()
-    #print(args)
     main(config,args)
