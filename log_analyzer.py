@@ -47,11 +47,13 @@ def config_reader(cfg_filepath,config_dict=config):
              config_to_update.update({name:value})
   else:
      logging.info("config file not found. I will use default config")
+  #конвертим в инт значения размера отчета
+  config_to_update.update({"REPORT_SIZE":int(config_to_update["REPORT_SIZE"])})
+  config_to_update.update({"MAX_ERR":int(config_to_update["MAX_ERR"])})
   return config_to_update
 
 #настройка лога
 def worker_log(worklog_dir):
-  print(worklog_dir)
   if not os.path.exists(worklog_dir):
        os.makedirs(worklog_dir)
   worklog_file=os.path.join(worklog_dir,'work_log-'+datetime.datetime.now().strftime("%Y.%m.%d_%H-%M-%S")+'.log')
@@ -74,7 +76,6 @@ def benchmark(original_func):
 #функция проверки существования файла отчета
 def check_report(report_dir,date_stamp):
   file_report_rend=os.path.join(report_dir,'report-'+date_stamp.strftime("%Y.%m.%d")+'.html') #файл который рендерим, отчет
-  print(file_report_rend)
   if os.path.exists(file_report_rend):
     logging.info('File is exists  report '+file_report_rend)
     return True 
@@ -234,28 +235,27 @@ def json_templater(json_array,report_dir,date_stamp):
        loggin.error('json_templater file not found') #добавить  обработку, если файл шаблона не найден
 
 def main(config_dictionary):
-  #dict_config=config_reader(config)
+  #переменные
   report_sz=config_dictionary["REPORT_SIZE"]
-  worker_log(config_dictionary["WORK_LOG"])
-  #file_log,date_log,ext=log_finder(config_dictionary["LOG_DIR"])  
-  file_info=log_finder(config_dictionary["LOG_DIR"])
-  if(check_report(config_dictionary["REPORT_DIR"],file_info.file_date)==False):
-      #получаем  словарЬ со значениями и количество ошибок при парсинге
-    timeurls, errcnt,uniquecnt,total_cnt,total_time=reader(config_dictionary["LOG_DIR"],file_info.filename,file_info.file_ext,config_dictionary["MAX_ERR"])
-    #reader(log_dir,file_log,date_log,ext,max_err)
-    #reader(config_dictionary["LOG_DIR"],file_info.filename,file_info.file_ext,config_dictionary["MAX_ERR"])
-      #доля ошибок парсинга
+  rep_dir=config_dictionary["REPORT_DIR"]
+  wl=config_dictionary["WORK_LOG"]
+  logfolder=config_dictionary["LOG_DIR"]
+  max_err=config_dictionary["MAX_ERR"]
+  #инициализация лога
+  worker_log(wl)
+  #namedtuple с информацией о последнем логе 
+  file_info=log_finder(logfolder)
+  if(check_report(rep_dir,file_info.file_date)==False):
+    #получаем  словарЬ со значениями и количество ошибок при парсинге
+    timeurls, errcnt,uniquecnt,total_cnt,total_time=reader(logfolder,file_info.filename,file_info.file_ext,max_err)
+    #доля ошибок парсинга
     parse_err=errcnt*100/total_cnt
-    if(parse_err<=config_dictionary["MAX_ERR"]):
+    if(parse_err<=max_err):
        final_dict=percent_url_counter(timeurls,uniquecnt,total_time,errcnt)
        json_mass=top_values(final_dict,report_sz)
-       json_templater(json_mass,config_dictionary["REPORT_DIR"],file_info.file_date)
-           #print("Error count is: "+str(errcnt))
-           #print("unique count  is: "+str(uniquecnt))
-           #print("total count str  is: "+str(total_cnt))
-           #print("total time url   is: "+str(total_time))
+       json_templater(json_mass,rep_dir,file_info.file_date)
     else:
-            logging.exception('Log parse errors is '+config_dictionary["MAX_ERR"]+'%. Exit program!!!!!')
+            logging.exception('Log parse errors is '+str(max_err)+'%. Exit program!!!!!')
             sys.exit()
   else:
          logging.info(" REPORT уже существует. Повторный запуск не требуется")
@@ -270,7 +270,6 @@ if __name__ == "__main__":
   args = parser.parse_args()
   #загрузка конфига
   if args.config:
-     print(args.config)
      dict_config=config_reader(args.config)
   else:
      dict_config=config_reader(config_file_global)
